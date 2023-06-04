@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: rabbitmq-golang
+data:
+  enabled_plugins: |
+    [rabbitmq_federation,rabbitmq_management,rabbitmq_peer_discovery_k8s].
+  rabbitmq.conf: |
+    log.console = true
+    cluster_formation.peer_discovery_backend  = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.k8s.address_type = hostname
+    cluster_formation.k8s.service_name = rabbitmq-headless
+    cluster_formation.node_cleanup.interval = 90
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_formation.discovery_retry_limit = 60
+    cluster_formation.discovery_retry_interval = 2000
+    load_definitions = /etc/rabbitmq/import.json
+  init-config.sh: |
+    cp /tmp/config/rabbitmq.conf /etc/rabbitmq/rabbitmq.conf
+    cp /tmp/config/enabled_plugins /etc/rabbitmq/enabled_plugins
+    echo $RABBITMQ_ERLANG_COOKIE > /var/lib/rabbitmq/.erlang.cookie
+    chmod 600 /var/lib/rabbitmq/.erlang.cookie
+    envsubst < /tmp/config/import.json > /etc/rabbitmq/import.json
+  import.json: |
+    {
+      "permissions": [
+        {
+          "configure": ".*",
+          "read": ".*",
+          "user": "admin",
+          "vhost": "test",
+          "write": ".*"
+        }
+      ],
+      "policies": [
+        {
+          "apply-to": "queues",
+          "definition": {
+            "ha-mode": "exactly",
+            "ha-params": 2,
+            "ha-sync-mode": "automatic"
+          },
+          "name": "ha-fed-test",
+          "pattern": ".*",
+          "priority": 0,
+          "vhost": "test"
+        }
+      ],
+      "users": [
+        {
+          "hashing_algorithm": "rabbit_password_hashing_sha256",
+          "limits": {},
+          "name": "admin",
+          "password": "$RABBITMQ_ADMIN_PASSWORD",
+          "tags": [
+            "administrator"
+          ]
+        }
+      ],
+      "vhosts": [
+        {
+          "limits": [],
+          "metadata": {
+            "description": "test vhost",
+            "tags": []
+          },
+          "name": "test"
+        }
+      ]
+    }

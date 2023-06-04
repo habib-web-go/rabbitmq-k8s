@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: rabbitmq-golang
+spec:
+  serviceName: rabbitmq-headless
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      serviceAccountName: rabbitmq-service-account
+      initContainers:
+        - name: config-loader
+          image: docker.repos.divar.cloud/bhgedigital/envsubst
+          imagePullPolicy: IfNotPresent
+          command: [ '/bin/sh', '/tmp/config/init-config.sh' ]
+          env:
+            - name: RABBITMQ_ERLANG_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: RABBITMQ_ERLANG_COOKIE
+            - name: RABBITMQ_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: RABBITMQ_ADMIN_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq/
+              readOnly: false
+            - name: config
+              mountPath: /tmp/config/
+              readOnly: false
+            - name: config-file
+              mountPath: /etc/rabbitmq/
+      containers:
+        - name: rabbitmq
+          image: docker.repos.divar.cloud/rabbitmq:3.9.14-management
+          ports:
+            - containerPort: 4369
+              name: discovery
+            - containerPort: 5672
+              name: amqp
+            - containerPort: 15672
+              name: management
+          env:
+            - name: RABBIT_POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: RABBIT_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: RABBITMQ_NODENAME
+              value: rabbit@$(RABBIT_POD_NAME).rabbitmq-headless.$(RABBIT_POD_NAMESPACE).svc.cluster.local
+            - name: RABBITMQ_USE_LONGNAME
+              value: "true"
+            - name: K8S_HOSTNAME_SUFFIX
+              value: .rabbitmq-headless.$(RABBIT_POD_NAMESPACE).svc.cluster.local
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq/
+              readOnly: false
+            - name: config-file
+              mountPath: /etc/rabbitmq/
+      volumes:
+        - name: config-file
+          emptyDir: { }
+        - name: config
+          configMap:
+            name: rabbitmq-config
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 2Gi

@@ -327,16 +327,19 @@ spec:
 
 برای اجرای ورکر کامند زیر را اجرا می‌کنیم.
 
+</div>
+
+
 ```shell
 go run main.go worker
 ```
 
+<div dir="rtl">
+
 و برای اجرای کلاینت تستی هم کامند زیر کمک می‌کنه.
+
+</div>
 
 ```shell
 go run main.go client
 ```
-
-
-</div>
-
